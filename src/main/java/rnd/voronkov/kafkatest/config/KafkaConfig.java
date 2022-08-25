@@ -5,34 +5,31 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.config.TopicConfig;
-import org.apache.kafka.common.serialization.LongDeserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
-import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.config.TopicBuilder;
-import org.springframework.kafka.core.*;
-import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
-import org.springframework.kafka.listener.ContainerProperties;
-import org.springframework.kafka.requestreply.ReplyingKafkaTemplate;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
+import org.springframework.kafka.core.KafkaAdmin;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.support.serializer.JsonSerializer;
-import reactor.core.publisher.Flux;
 import reactor.kafka.receiver.KafkaReceiver;
 import reactor.kafka.receiver.ReceiverOptions;
-import reactor.kafka.receiver.ReceiverRecord;
 import reactor.kafka.receiver.internals.ConsumerFactory;
 import reactor.kafka.receiver.internals.DefaultKafkaReceiver;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
 public class KafkaConfig {
 
-    private String bootstrapAddress = "localhost:29092";
+    public static String bootstrapAddress = "localhost:29092";
+    public static String topicRs = "bookRs";
+    public static String topicRq = "bookRq";
 
     @Bean
     Map<String, Object> kafkaConsumerConfiguration() {
@@ -51,7 +48,7 @@ public class KafkaConfig {
     @Bean
     ReceiverOptions<String, String> kafkaReceiverOptions() {
         ReceiverOptions<String, String> options = ReceiverOptions.create(kafkaConsumerConfiguration());
-        return options.subscription(Collections.singleton("bookRs"));
+        return options.subscription(Collections.singleton(bootstrapAddress));
     }
 
     @Bean
@@ -95,7 +92,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic topic1() {
-        return TopicBuilder.name("bookRq")
+        return TopicBuilder.name(topicRq)
                 .partitions(2)
                 .replicas(2)
                 .configs(topicConfig())
@@ -104,7 +101,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic topic2() {
-        return TopicBuilder.name("bookRs")
+        return TopicBuilder.name(topicRs)
                 .partitions(2)
                 .replicas(2)
                 .configs(topicConfig())

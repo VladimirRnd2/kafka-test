@@ -3,6 +3,7 @@ package rnd.voronkov.kafkatest.rest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextRefreshedEvent;
@@ -14,6 +15,7 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 import reactor.kafka.receiver.KafkaReceiver;
+import rnd.voronkov.kafkatest.config.KafkaConfig;
 import rnd.voronkov.kafkatest.model.Goodbye;
 import rnd.voronkov.kafkatest.model.Greeting;
 import rnd.voronkov.kafkatest.service.KafkaReactiveConsumer;
@@ -30,71 +32,32 @@ import java.util.concurrent.TimeUnit;
 @RequestMapping("/kafka")
 public class ProducerKafkaController {
 
-
     private KafkaTemplate<String, Object> kafkaTemplate;
-    private final WebClient webClient;
-    private final KafkaReceiver<String, String> kafkaReceiver;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final KafkaReactiveConsumer kafkaReactiveConsumer;
 
-    private final Map<String, String> map = new ConcurrentHashMap<>();
-
     @Autowired
-    public ProducerKafkaController(KafkaTemplate<String, Object> kafkaTemplate, WebClient webClient, KafkaReceiver<String, String> kafkaReceiver, KafkaReactiveConsumer kafkaReactiveConsumer) {
+    public ProducerKafkaController(KafkaTemplate<String, Object> kafkaTemplate, KafkaReactiveConsumer kafkaReactiveConsumer) {
         this.kafkaTemplate = kafkaTemplate;
-        this.webClient = webClient;
-        this.kafkaReceiver = kafkaReceiver;
         this.kafkaReactiveConsumer = kafkaReactiveConsumer;
     }
 
 
     @PostMapping(value = "/create")
-    public Flux<Goodbye> createKafkaMessage(@RequestBody Greeting message) throws InterruptedException, ExecutionException, JsonProcessingException {
+    public Flux<Goodbye> createKafkaMessage(@RequestBody Greeting message) throws JsonProcessingException {
         sendGoodbye(message);
-//        consumeAndDispose();
         while (true) {
             if (kafkaReactiveConsumer.getResultMap().containsKey(message.getId().toString())) {
-                List<Goodbye> goodbyeList = objectMapper.readValue(kafkaReactiveConsumer.getResultMap().get(message.getId().toString()), new TypeReference<List<Goodbye>>() {});
+                List<Goodbye> goodbyeList = objectMapper.readValue(kafkaReactiveConsumer.getResultMap().get(message.getId().toString()), new TypeReference<List<Goodbye>>() {
+                });
                 kafkaReactiveConsumer.getResultMap().remove(message.getId().toString());
                 return Flux.fromIterable(goodbyeList);
             }
         }
     }
 
-    private static byte[] intToBytesBigEndian(final int data) {
-        return new byte[]{
-                (byte) ((data >> 24) & 0xff), (byte) ((data >> 16) & 0xff),
-                (byte) ((data >> 8) & 0xff), (byte) ((data >> 0) & 0xff),
-        };
-    }
-
-    private void sendGoodbye(Greeting message) throws ExecutionException, InterruptedException {
-        ProducerRecord<String, Object> record = new ProducerRecord<>("bookRq", message.getId().toString(), message);
+    private void sendGoodbye(Greeting message) {
+        ProducerRecord<String, Object> record = new ProducerRecord<>(KafkaConfig.topicRq, message.getId().toString(), message);
         kafkaTemplate.send(record);
-    }
-
-        @EventListener(ContextRefreshedEvent.class)
-//    @GetMapping("/flux")
-    public Disposable getFlux() {
-        return kafkaReceiver.receive()
-                .doOnNext(r -> {
-                    kafkaReactiveConsumer.getResultMap().put(r.key(), r.value());
-                    r.receiverOffset().acknowledge();
-                })
-                .doOnError(Throwable::printStackTrace)
-                .map(r -> {
-                    String value = r.value();
-                    System.out.println(value);
-                    return value;
-                })
-                .publishOn(Schedulers.newParallel("lol")).subscribe();
-    }
-
-    private void consumeAndDispose() throws InterruptedException {
-        int count = 1;
-        CountDownLatch latch = new CountDownLatch(count);
-        Disposable disposable = kafkaReactiveConsumer.consumeMessages("bookRs", latch);
-        latch.await(5, TimeUnit.SECONDS);
-        disposable.dispose();
     }
 }
